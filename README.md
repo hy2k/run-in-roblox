@@ -34,5 +34,15 @@ This will open `MyPlace.rbxlx` in Roblox Studio, run `starter-script.lua` until 
 
 `--place` is optional, but `--script` is required.
 
+### Run from WSL
+
+```bash
+run-in-roblox \
+    --place tests.rbxl \
+    --script tests/init.server.lua \
+    --app $LOCALAPPDATA/Roblox/Versions/<version>/RobloxStudioBeta.exe \
+    --plugins $LOCALAPPDATA/Roblox/Plugins
+```
+
 ## License
 run-in-roblox is available under the terms of the MIT License. See [LICENSE.txt](LICENSE.txt) or <https://opensource.org/licenses/MIT> for details.

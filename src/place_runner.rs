@@ -5,10 +5,9 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, bail};
 use fs_err as fs;
 use fs_err::File;
-use roblox_install::RobloxStudio;
 
 use crate::{
     message_receiver::{Message, MessageReceiver, MessageReceiverOptions, RobloxMessage},
@@ -27,17 +26,16 @@ impl Drop for KillOnDrop {
 pub struct PlaceRunner {
     pub port: u16,
     pub place_path: PathBuf,
+    pub studio_app_path: PathBuf,
+    pub studio_plugins_path: PathBuf,
     pub server_id: String,
     pub lua_script: String,
 }
 
 impl PlaceRunner {
     pub fn run(&self, sender: mpsc::Sender<Option<RobloxMessage>>) -> Result<(), anyhow::Error> {
-        let studio_install =
-            RobloxStudio::locate().context("Could not locate a Roblox Studio installation.")?;
-
-        let plugin_file_path = studio_install
-            .plugins_path()
+        let plugin_file_path = self
+            .studio_plugins_path
             .join(format!("run_in_roblox-{}.rbxmx", self.port));
 
         let plugin = RunInRbxPlugin {
@@ -55,7 +53,7 @@ impl PlaceRunner {
         });
 
         let _studio_process = KillOnDrop(
-            Command::new(studio_install.application_path())
+            Command::new(&self.studio_app_path)
                 .arg(format!("{}", self.place_path.display()))
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())

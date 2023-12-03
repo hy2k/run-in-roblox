@@ -4,11 +4,13 @@ mod plugin;
 
 use std::{path::PathBuf, process, sync::mpsc, thread};
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail, Context};
 use colored::Colorize;
 use fs_err as fs;
 use structopt::StructOpt;
 use tempfile::tempdir;
+
+use roblox_install::RobloxStudio;
 
 use crate::{
     message_receiver::{OutputLevel, RobloxMessage},
@@ -27,6 +29,14 @@ struct Options {
     /// The script will be run at plugin-level security.
     #[structopt(long("script"))]
     script_path: PathBuf,
+
+    /// A path to the Roblox Studio executable to run.
+    #[structopt(long("app"))]
+    studio_app_path: Option<PathBuf>,
+
+    /// A path to the Roblox Studio plugins folder to use.
+    #[structopt(long("plugins"))]
+    studio_plugins_path: Option<PathBuf>,
 }
 
 fn run(options: Options) -> Result<i32, anyhow::Error> {
@@ -55,6 +65,47 @@ fn run(options: Options) -> Result<i32, anyhow::Error> {
         }
     }
 
+    let studio_plugins_path = match &options.studio_plugins_path {
+        Some(plugins_path) => {
+            if !plugins_path.exists() {
+                bail!("Plugins path does not exist: {}", plugins_path.display());
+            }
+            if !plugins_path.is_dir() {
+                bail!(
+                    "Plugins path is not a directory: {}",
+                    plugins_path.display()
+                );
+            }
+
+            plugins_path.clone()
+        }
+        None => {
+            let studio_install =
+                RobloxStudio::locate().context("Could not locate a Roblox Studio installation.")?;
+
+            studio_install.plugins_path().to_path_buf()
+        }
+    };
+
+    let studio_app_path = match &options.studio_app_path {
+        Some(path) => {
+            if !path.exists() {
+                bail!("Studio path does not exist: {}", path.display());
+            }
+            if path.is_dir() {
+                bail!("Studio path is a directory: {}", path.display());
+            }
+
+            path.clone()
+        }
+        None => {
+            let studio_install =
+                RobloxStudio::locate().context("Could not locate a Roblox Studio installation.")?;
+
+            studio_install.application_path().to_path_buf()
+        }
+    };
+
     let script_contents = fs::read_to_string(&options.script_path)?;
 
     // Generate a random, unique ID for this session. The plugin we inject will
@@ -67,6 +118,8 @@ fn run(options: Options) -> Result<i32, anyhow::Error> {
         place_path: temp_place_path.clone(),
         server_id: server_id.clone(),
         lua_script: script_contents.clone(),
+        studio_app_path,
+        studio_plugins_path,
     };
 
     let (sender, receiver) = mpsc::channel();
