@@ -1,8 +1,10 @@
-use std::{collections::HashMap, io::Write};
+use std::io::Write;
 
 use rbx_xml::EncodeError;
 
-use rbx_dom_weak::{RbxInstanceProperties, RbxTree, RbxValue};
+use rbx_dom_weak::{InstanceBuilder, WeakDom};
+
+use rbx_types::Variant;
 
 static PLUGIN_TEMPLATE: &'static str = include_str!("plugin_main_template.lua");
 
@@ -15,50 +17,31 @@ pub struct RunInRbxPlugin<'a> {
 impl<'a> RunInRbxPlugin<'a> {
     pub fn write<W: Write>(&self, output: W) -> Result<(), EncodeError> {
         let tree = self.build_plugin();
-        let root_id = tree.get_root_id();
+        let root_ref = tree.root_ref();
 
-        rbx_xml::to_writer_default(output, &tree, &[root_id])
+        rbx_xml::to_writer_default(output, &tree, &[root_ref])
     }
 
-    fn build_plugin(&self) -> RbxTree {
+    fn build_plugin(&self) -> WeakDom {
         let complete_source = PLUGIN_TEMPLATE
             .replace("{{PORT}}", &self.port.to_string())
             .replace("{{SERVER_ID}}", self.server_id);
 
-        let plugin_script = RbxInstanceProperties {
-            name: "run-in-roblox-plugin".to_owned(),
-            class_name: "Script".to_owned(),
-            properties: {
-                let mut properties = HashMap::new();
-
-                properties.insert(
-                    "Source".to_owned(),
-                    RbxValue::String {
-                        value: complete_source,
-                    },
-                );
-
-                properties
-            },
-        };
+        let plugin_script = InstanceBuilder::new("Script")
+            .with_name("run-in-roblox-plugin")
+            .with_property("Source", Variant::String(complete_source));
 
         let main_source = format!("return function()\n{}\nend", self.lua_script);
 
-        let injected_main = RbxInstanceProperties {
-            name: "Main".to_owned(),
-            class_name: "ModuleScript".to_owned(),
-            properties: {
-                let mut properties = HashMap::new();
+        let injected_main = InstanceBuilder::new("ModuleScript")
+            .with_name("Main")
+            .with_property("Source", Variant::String(main_source));
+        
 
-                properties.insert("Source".to_owned(), RbxValue::String { value: main_source });
+        let mut tree = WeakDom::new(plugin_script);
 
-                properties
-            },
-        };
-
-        let mut tree = RbxTree::new(plugin_script);
-        let root_id = tree.get_root_id();
-        tree.insert_instance(injected_main, root_id);
+        let root_ref = tree.root_ref();
+        tree.insert(root_ref, injected_main);
 
         tree
     }
